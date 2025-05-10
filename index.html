@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ESP32 Motor Control</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    #speedDisplay {
+      font-size: 24px;
+      margin-top: 10px;
+      color: #333;
+    }
+    .control {
+      margin-top: 20px;
+    }
+    input[type=range] {
+      width: 100%;
+    }
+    button {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+<body>
+  <h1>ESP32 Bluetooth Motor Control</h1>
+  <button id="connectBtn">Connect to ESP32</button>
+  <div class="control">
+    <label for="speedSlider">Set Motor Speed:</label>
+    <input type="range" id="speedSlider" min="0" max="255" value="100">
+    <div>Speed Value: <span id="speedValue">100</span></div>
+    <button id="sendSpeedBtn">Send Speed</button>
+  </div>
+  <div id="speedDisplay">Current Speed: --</div>
+
+  <script>
+    let bleDevice, bleCharacteristic;
+    const SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+    const CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+
+    document.getElementById('connectBtn').onclick = async () => {
+      try {
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ name: "SelfBalancingRobot" }],
+          optionalServices: [SERVICE_UUID]
+        });
+        const server = await bleDevice.gatt.connect();
+        const service = await server.getPrimaryService(SERVICE_UUID);
+        bleCharacteristic = await service.getCharacteristic(CHARACTERISTIC_UUID);
+
+        // Start notifications
+        await bleCharacteristic.startNotifications();
+        bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+          const value = new TextDecoder().decode(event.target.value);
+          const parts = value.split(',');
+          const speed = parts[7];  // baseMotorSpeed is 8th value in CSV string
+          document.getElementById('speedDisplay').innerText = `Current Speed: ${speed}`;
+        });
+
+        alert("Connected to ESP32!");
+      } catch (error) {
+        alert("Connection failed: " + error);
+      }
+    };
+
+    document.getElementById('speedSlider').oninput = (e) => {
+      document.getElementById('speedValue').innerText = e.target.value;
+    };
+
+    document.getElementById('sendSpeedBtn').onclick = () => {
+      const speed = document.getElementById('speedSlider').value;
+      if (bleCharacteristic) {
+        bleCharacteristic.writeValue(new TextEncoder().encode(`PID:${speed},0,0,3.8`));
+      }
+    };
+  </script>
+</body>
+</html>
